@@ -47,11 +47,21 @@ import android.widget.TextView;
 
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.sync.SunshineSyncAdapter;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.wearable.MessageApi;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.NodeApi;
+import com.google.android.gms.wearable.Wearable;
 
 /**
  * Encapsulates fetching the forecast and displaying it as a {@link android.support.v7.widget.RecyclerView} layout.
  */
-public class ForecastFragment extends Fragment implements LoaderManager.LoaderCallbacks<Cursor>, SharedPreferences.OnSharedPreferenceChangeListener {
+public class ForecastFragment extends Fragment implements
+        LoaderManager.LoaderCallbacks<Cursor>,
+        SharedPreferences.OnSharedPreferenceChangeListener,
+        GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener {
     public static final String LOG_TAG = ForecastFragment.class.getSimpleName();
     private ForecastAdapter mForecastAdapter;
     private RecyclerView mRecyclerView;
@@ -61,10 +71,15 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
     private long mInitialSelectedDate = -1;
 
     private static final String SELECTED_KEY = "selected_position";
+    private static final String WEAR_MESSAGE_PATH = "/message";
+    private static final String START_ACTIVITY = "/start_activity";
 
     private static final int FORECAST_LOADER = 0;
     // For the forecast view we're showing only a small subset of the stored data.
     // Specify the columns we need.
+
+    private GoogleApiClient mApiClient;
+
     private static final String[] FORECAST_COLUMNS = {
             // In this case the id needs to be fully qualified with a table name, since
             // the content provider joins the location & weather tables in the background
@@ -115,6 +130,16 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         super.onCreate(savedInstanceState);
         // Add this line in order for this fragment to handle menu events.
         setHasOptionsMenu(true);
+        initGoogleApiClient();
+    }
+
+
+    private void initGoogleApiClient() {
+        mApiClient = new GoogleApiClient.Builder(getActivity())
+                .addApi(Wearable.API)
+                .build();
+
+        mApiClient.connect();
     }
 
     @Override
@@ -191,7 +216,7 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
                 String locationSetting = Utility.getPreferredLocation(getActivity());
                 ((Callback) getActivity())
                         .onItemSelected(WeatherContract.WeatherEntry.buildWeatherLocationWithDate(
-                                        locationSetting, date),
+                                locationSetting, date),
                                 vh
                         );
             }
@@ -219,7 +244,7 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
             }
         }
 
-        final AppBarLayout appbarView = (AppBarLayout)rootView.findViewById(R.id.appbar);
+        final AppBarLayout appbarView = (AppBarLayout) rootView.findViewById(R.id.appbar);
         if (null != appbarView) {
             ViewCompat.setElevation(appbarView, 0);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -256,7 +281,7 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         // We hold for transition here just in-case the activity
         // needs to be re-created. In a standard return transition,
         // this doesn't actually make a difference.
-        if ( mHoldForTransition ) {
+        if (mHoldForTransition) {
             getActivity().supportPostponeEnterTransition();
         }
         getLoaderManager().initLoader(FORECAST_LOADER, null, this);
@@ -327,8 +352,9 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
     @Override
     public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
         mForecastAdapter.swapCursor(data);
+        sendMessage(WEAR_MESSAGE_PATH, "Test", data);
         updateEmptyView();
-        if ( data.getCount() == 0 ) {
+        if (data.getCount() == 0) {
             getActivity().supportStartPostponedEnterTransition();
         } else {
             mRecyclerView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
@@ -344,9 +370,9 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
                             Cursor data = mForecastAdapter.getCursor();
                             int count = data.getCount();
                             int dateColumn = data.getColumnIndex(WeatherContract.WeatherEntry.COLUMN_DATE);
-                            for ( int i = 0; i < count; i++ ) {
+                            for (int i = 0; i < count; i++) {
                                 data.moveToPosition(i);
-                                if ( data.getLong(dateColumn) == mInitialSelectedDate ) {
+                                if (data.getLong(dateColumn) == mInitialSelectedDate) {
                                     position = i;
                                     break;
                                 }
@@ -360,7 +386,7 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
                         if (null != vh && mAutoSelectView) {
                             mForecastAdapter.selectView(vh);
                         }
-                        if ( mHoldForTransition ) {
+                        if (mHoldForTransition) {
                             getActivity().supportStartPostponedEnterTransition();
                         }
                         return true;
@@ -371,7 +397,6 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         }
 
     }
-
 
 
     @Override
@@ -403,9 +428,9 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         use to determine why they aren't seeing weather.
      */
     private void updateEmptyView() {
-        if ( mForecastAdapter.getItemCount() == 0 ) {
+        if (mForecastAdapter.getItemCount() == 0) {
             TextView tv = (TextView) getView().findViewById(R.id.recyclerview_forecast_empty);
-            if ( null != tv ) {
+            if (null != tv) {
                 // if cursor is empty, why? do we have an invalid location
                 int message = R.string.empty_forecast_list;
                 @SunshineSyncAdapter.LocationStatus int location = Utility.getLocationStatus(getActivity());
@@ -434,5 +459,51 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         if (key.equals(getString(R.string.pref_location_status_key))) {
             updateEmptyView();
         }
+    }
+
+    private void sendMessage(final String path, final String text, Cursor cursor) {
+        readCursor(cursor);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mApiClient).await();
+                for (Node node : nodes.getNodes()) {
+                    MessageApi.SendMessageResult result = Wearable.MessageApi.sendMessage(
+                            mApiClient, node.getId(), path, text.getBytes()).await();
+                }
+            }
+        }).start();
+    }
+
+    private String readCursor(Cursor cursor) {
+        StringBuilder sb = new StringBuilder();
+        if (cursor != null) {
+            if (cursor.moveToFirst()) {
+                do {
+                    String date = cursor.getString((COL_WEATHER_DATE));
+                    String max_temp = cursor.getString((COL_WEATHER_MAX_TEMP));
+                    String min_temp = cursor.getString((COL_WEATHER_MIN_TEMP));
+                    sb.append("Date: ".concat(date)).append(", Max_Temp: ".concat(max_temp)).append(", Min_Temp: ".concat(min_temp));
+                    Log.e("TAG", "Date: " + date);
+                } while (cursor.moveToNext());
+            }
+        }
+        return sb.toString();
+    }
+
+
+    @Override
+    public void onConnected(Bundle bundle) {
+        sendMessage(START_ACTIVITY, "", null);
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+
     }
 }
