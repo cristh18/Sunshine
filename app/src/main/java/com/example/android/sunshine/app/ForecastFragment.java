@@ -17,6 +17,10 @@ package com.example.android.sunshine.app;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.TypedArray;
@@ -25,6 +29,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.design.widget.AppBarLayout;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.LoaderManager;
@@ -46,12 +52,14 @@ import android.widget.AbsListView;
 import android.widget.TextView;
 
 import com.example.android.sunshine.app.data.WeatherContract;
+import com.example.android.sunshine.app.sync.JobSchedulerService;
 import com.example.android.sunshine.app.sync.SunshineSyncAdapter;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.wearable.MessageApi;
-import com.google.android.gms.wearable.Node;
-import com.google.android.gms.wearable.NodeApi;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
 import com.google.android.gms.wearable.Wearable;
 
 /**
@@ -62,6 +70,7 @@ public class ForecastFragment extends Fragment implements
         SharedPreferences.OnSharedPreferenceChangeListener,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
+
     public static final String LOG_TAG = ForecastFragment.class.getSimpleName();
     private ForecastAdapter mForecastAdapter;
     private RecyclerView mRecyclerView;
@@ -71,15 +80,10 @@ public class ForecastFragment extends Fragment implements
     private long mInitialSelectedDate = -1;
 
     private static final String SELECTED_KEY = "selected_position";
-    private static final String WEAR_MESSAGE_PATH = "/message";
-    private static final String START_ACTIVITY = "/start_activity";
 
     private static final int FORECAST_LOADER = 0;
     // For the forecast view we're showing only a small subset of the stored data.
     // Specify the columns we need.
-
-    private GoogleApiClient mApiClient;
-
     private static final String[] FORECAST_COLUMNS = {
             // In this case the id needs to be fully qualified with a table name, since
             // the content provider joins the location & weather tables in the background
@@ -130,16 +134,8 @@ public class ForecastFragment extends Fragment implements
         super.onCreate(savedInstanceState);
         // Add this line in order for this fragment to handle menu events.
         setHasOptionsMenu(true);
+        mJobScheduler = (JobScheduler) getActivity().getSystemService(Context.JOB_SCHEDULER_SERVICE);
         initGoogleApiClient();
-    }
-
-
-    private void initGoogleApiClient() {
-        mApiClient = new GoogleApiClient.Builder(getActivity())
-                .addApi(Wearable.API)
-                .build();
-
-        mApiClient.connect();
     }
 
     @Override
@@ -352,7 +348,7 @@ public class ForecastFragment extends Fragment implements
     @Override
     public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
         mForecastAdapter.swapCursor(data);
-        sendMessage(WEAR_MESSAGE_PATH, "Test", data);
+        initJob(data);
         updateEmptyView();
         if (data.getCount() == 0) {
             getActivity().supportStartPostponedEnterTransition();
@@ -461,40 +457,60 @@ public class ForecastFragment extends Fragment implements
         }
     }
 
-    private void sendMessage(final String path, final String text, Cursor cursor) {
-        readCursor(cursor);
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mApiClient).await();
-                for (Node node : nodes.getNodes()) {
-                    MessageApi.SendMessageResult result = Wearable.MessageApi.sendMessage(
-                            mApiClient, node.getId(), path, text.getBytes()).await();
-                }
-            }
-        }).start();
+    /*----------------------------------------------------------------*/
+    private static final String KEY_WEATHER = "weather";
+    private static final String ITEM_MAX_TEMP = "/temp";
+    public static GoogleApiClient apiClient;
+    private JobScheduler mJobScheduler;
+
+    private void initGoogleApiClient() {
+        apiClient = new GoogleApiClient.Builder(getActivity())
+                .addApi(Wearable.API)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
     }
 
-    private String readCursor(Cursor cursor) {
-        StringBuilder sb = new StringBuilder();
-        if (cursor != null) {
-            if (cursor.moveToFirst()) {
-                do {
-                    String date = cursor.getString((COL_WEATHER_DATE));
-                    String max_temp = cursor.getString((COL_WEATHER_MAX_TEMP));
-                    String min_temp = cursor.getString((COL_WEATHER_MIN_TEMP));
-                    sb.append("Date: ".concat(date)).append(", Max_Temp: ".concat(max_temp)).append(", Min_Temp: ".concat(min_temp));
-                    Log.e("TAG", "Date: " + date);
-                } while (cursor.moveToNext());
-            }
+    private void initJob(Cursor cursor) {
+        JobInfo.Builder builder = new JobInfo.Builder(1,
+                new ComponentName(getActivity().getPackageName(), JobSchedulerService.class.getName()));
+
+
+        builder.setPeriodic(3000);
+
+
+        if (mJobScheduler.schedule(builder.build()) <= 0) {
+            //If something goes wrong
         }
-        return sb.toString();
+    }
+
+    //<editor-fold desc="CICLO DE VIDA">
+    @Override
+    public void onStart() {
+        super.onStart();
+        apiClient.connect();
     }
 
 
     @Override
-    public void onConnected(Bundle bundle) {
-        sendMessage(START_ACTIVITY, "", null);
+    public void onStop() {
+        if (apiClient != null && apiClient.isConnected()) {
+            apiClient.disconnect();
+        }
+        super.onStop();
+    }
+
+    private void sendToWear() {
+        PutDataMapRequest putDataMapReq = PutDataMapRequest.create(ITEM_MAX_TEMP);
+        putDataMapReq.getDataMap().putString(KEY_WEATHER, "30");
+
+        PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
+        PendingResult<DataApi.DataItemResult> result = Wearable.DataApi.putDataItem(apiClient, putDataReq);
+    }
+
+    @Override
+    public void onConnected(@Nullable Bundle bundle) {
+
     }
 
     @Override
@@ -503,7 +519,7 @@ public class ForecastFragment extends Fragment implements
     }
 
     @Override
-    public void onConnectionFailed(ConnectionResult connectionResult) {
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
 
     }
 }

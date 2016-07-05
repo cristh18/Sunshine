@@ -1,4 +1,4 @@
-package com.example.cristhian.sunshinewear;
+package com.example.android.sunshine.app;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
