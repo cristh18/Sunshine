@@ -52,6 +52,7 @@ import android.widget.AbsListView;
 import android.widget.TextView;
 
 import com.example.android.sunshine.app.data.WeatherContract;
+import com.example.android.sunshine.app.model.TodayWeather;
 import com.example.android.sunshine.app.sync.JobSchedulerService;
 import com.example.android.sunshine.app.sync.SunshineSyncAdapter;
 import com.google.android.gms.common.ConnectionResult;
@@ -461,6 +462,7 @@ public class ForecastFragment extends Fragment implements
     private static final String KEY_WEATHER = "weather";
     private static final String ITEM_MAX_TEMP = "/temp";
     public static GoogleApiClient apiClient;
+    public static TodayWeather todayWeather;
     private JobScheduler mJobScheduler;
 
     private void initGoogleApiClient() {
@@ -472,6 +474,7 @@ public class ForecastFragment extends Fragment implements
     }
 
     private void initJob(Cursor cursor) {
+        getTodayWeather(cursor);
         JobInfo.Builder builder = new JobInfo.Builder(1,
                 new ComponentName(getActivity().getPackageName(), JobSchedulerService.class.getName()));
 
@@ -481,6 +484,19 @@ public class ForecastFragment extends Fragment implements
 
         if (mJobScheduler.schedule(builder.build()) <= 0) {
             //If something goes wrong
+        }
+    }
+
+    private void getTodayWeather(Cursor cursor) {
+        if (cursor.moveToFirst()) {
+            do {
+                if (todayWeather == null) {
+                    String date = cursor.getString(COL_WEATHER_DATE);
+                    String maxTemp = cursor.getString(COL_WEATHER_MAX_TEMP);
+                    String minTemp = cursor.getString(COL_WEATHER_MIN_TEMP);
+                    todayWeather = new TodayWeather(date, maxTemp, minTemp, null);
+                }
+            } while (cursor.moveToNext());
         }
     }
 

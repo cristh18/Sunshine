@@ -25,15 +25,17 @@ public class MainActivity extends WearableActivity implements
         GoogleApiClient.OnConnectionFailedListener {
 
     private static final String KEY_WEATHER = "weather";
+    private static final String KEY_MIN_TEMP = "min_temp";
+    private static final String KEY_DATE = "date";
     private static final String ITEM_MAX_TEMP = "/temp";
+    private String todayDate;
     private String maxTemp;
-    private TextView textView;
+    private String minTemp;
+    private TextView mTextViewTodayDate;
+    private TextView mTextViewMaxTemp;
+    private TextView mTextViewMinTemp;
     private final static String LOG_TAG = MainActivity.class.getName();
 
-
-    /**
-     * CLIENTE
-     */
     GoogleApiClient apiClient;
 
 
@@ -42,26 +44,23 @@ public class MainActivity extends WearableActivity implements
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         setAmbientEnabled();
-
-        textView = (TextView) findViewById(R.id.text);
-
-
+        initViews();
         initGoogleApiClient();
-
-
-        /**
-         * ((SINCRONIZACION)) cuando iniciamos la activity, vamos a obtener el contador del MOBILE y vamos a inicializar el del WEAR con el mismo numero
-         */
-
         synchronize();
 
 
     }
 
+    private void initViews() {
+        mTextViewTodayDate = (TextView) findViewById(R.id.textView_todayDate);
+        mTextViewMaxTemp = (TextView) findViewById(R.id.textView_maxTemp);
+        mTextViewMinTemp = (TextView) findViewById(R.id.textView_minTemp);
+    }
+
 
     private void synchronize() {
-        PendingResult<DataItemBuffer> resultado = Wearable.DataApi.getDataItems(apiClient);
-        resultado.setResultCallback(new ResultCallback<DataItemBuffer>() {
+        PendingResult<DataItemBuffer> result = Wearable.DataApi.getDataItems(apiClient);
+        result.setResultCallback(new ResultCallback<DataItemBuffer>() {
             @Override
             public void onResult(DataItemBuffer dataItems) {
 
@@ -70,12 +69,16 @@ public class MainActivity extends WearableActivity implements
                     if (dataItem.getUri().getPath().equals(ITEM_MAX_TEMP)) {
                         DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
 
+                        todayDate = dataMapItem.getDataMap().getString(KEY_DATE);
                         maxTemp = dataMapItem.getDataMap().getString(KEY_WEATHER);
+                        minTemp = dataMapItem.getDataMap().getString(KEY_MIN_TEMP);
 
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                textView.setText((maxTemp));
+                                mTextViewTodayDate.setText((todayDate));
+                                mTextViewMaxTemp.setText((maxTemp));
+                                mTextViewMinTemp.setText((minTemp));
 
                             }
                         });
@@ -89,8 +92,8 @@ public class MainActivity extends WearableActivity implements
     private void initGoogleApiClient() {
         apiClient = new GoogleApiClient.Builder(this)
                 .addApi(Wearable.API)
-                .addConnectionCallbacks(this)//nos notifica cuando estamos conectados
-                .addOnConnectionFailedListener(this)// ofrece el resultado del error
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
                 .build();
     }
 
@@ -122,20 +125,19 @@ public class MainActivity extends WearableActivity implements
                     maxTemp = dataMap.getString(KEY_WEATHER);
                     runOnUiThread(new Runnable() {
                         @Override
-                        public void run() {//(ACTUALIZACION)CADA CLICK EN TEXTVIEW DEL MOBILE VAMOS A ACTUALIZAR EL TEXTVIEW DEL WEAR
-                            textView.setText(maxTemp);
+                        public void run() {
+                            mTextViewTodayDate.setText((todayDate));
+                            mTextViewMaxTemp.setText((maxTemp));
+                            mTextViewMinTemp.setText((minTemp));
                         }
                     });
                 }
-            } else if (event.getType() == DataEvent.TYPE_DELETED) {//algun item a sido borrado
+            } else if (event.getType() == DataEvent.TYPE_DELETED) {
 
             }
-
-
         }
     }
 
-    //<editor-fold desc="CICLO DE VIDA">
     @Override
     protected void onStart() {
         super.onStart();
@@ -146,17 +148,9 @@ public class MainActivity extends WearableActivity implements
     @Override
     protected void onStop() {
         Wearable.DataApi.removeListener(apiClient, this);
-
         if (apiClient != null && apiClient.isConnected()) {
             apiClient.disconnect();
         }
-
         super.onStop();
-
-
     }
-
-    //</editor-fold>
-
-
 }
