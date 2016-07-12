@@ -12,11 +12,29 @@
         android:gravity="center"
         app:layout_box="left|right">
 
+        <TextView
+            android:id="@+id/textView_labelRandomValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/random_value"
+            android:textColor="@color/white"
+            android:textSize="15dp" />
+
+        <TextView
+            android:id="@+id/textView_randomValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="33dp"
+            android:layout_toRightOf="@id/textView_labelRandomValue"
+            android:text="0"
+            android:textColor="@color/white"
+            android:textSize="15dp" />
 
         <TextView
             android:id="@+id/textView_labelTodayDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_below="@+id/textView_labelRandomValue"
             android:text="@string/date"
             android:textColor="@color/white"
             android:textSize="15dp" />
@@ -25,7 +43,8 @@
             android:id="@+id/textView_todayDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="100dp"
+            android:layout_below="@+id/textView_randomValue"
+            android:layout_marginStart="0dp"
             android:layout_toRightOf="@id/textView_labelTodayDate"
             android:text="0"
             android:textColor="@color/white"
@@ -45,7 +64,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_below="@+id/textView_todayDate"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="9dp"
             android:layout_toRightOf="@+id/textView_labelMaxTemp"
             android:text="0"
             android:textColor="@color/white"

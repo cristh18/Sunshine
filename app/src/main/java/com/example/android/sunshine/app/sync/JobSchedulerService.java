@@ -18,7 +18,8 @@ import com.google.android.gms.wearable.Wearable;
  * Created by cristhian on 4/07/16.
  */
 public class JobSchedulerService extends JobService {
-    private static final String KEY_WEATHER = "weather";
+    private static final String KEY_RANDOM_VALUE = "random_value";
+    private static final String KEY_MAX_TEMP = "max_temp";
     private static final String KEY_MIN_TEMP = "min_temp";
     private static final String KEY_DATE = "date";
     private static final String ITEM_MAX_TEMP = "/temp";
@@ -54,14 +55,15 @@ public class JobSchedulerService extends JobService {
     }
 
     private void sendToWear(int temp) {
-        //String todayMaxTemp = String.valueOf(temp);
+        String randomValue = String.valueOf(temp);
         String todayDate = ForecastFragment.todayWeather != null ? ForecastFragment.todayWeather.getTodayDate() : "null";
         String todayMaxTemp = ForecastFragment.todayWeather != null ? ForecastFragment.todayWeather.getTodayMaxTemp() : "null";
         String todayMinTemp = ForecastFragment.todayWeather != null ? ForecastFragment.todayWeather.getTodayMinTemp() : "null";
         PutDataMapRequest putDataMapReq = PutDataMapRequest.create(ITEM_MAX_TEMP);
 
+        putDataMapReq.getDataMap().putString(KEY_RANDOM_VALUE, randomValue);
         putDataMapReq.getDataMap().putString(KEY_DATE, todayDate);
-        putDataMapReq.getDataMap().putString(KEY_WEATHER, todayMaxTemp);
+        putDataMapReq.getDataMap().putString(KEY_MAX_TEMP, todayMaxTemp);
         putDataMapReq.getDataMap().putString(KEY_MIN_TEMP, todayMinTemp);
 
 

@@ -24,13 +24,16 @@ public class MainActivity extends WearableActivity implements
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
 
-    private static final String KEY_WEATHER = "weather";
+    private static final String KEY_RANDOM_VALUE = "random_value";
+    private static final String KEY_MAX_TEMP = "max_temp";
     private static final String KEY_MIN_TEMP = "min_temp";
     private static final String KEY_DATE = "date";
     private static final String ITEM_MAX_TEMP = "/temp";
+    private String randomValue;
     private String todayDate;
     private String maxTemp;
     private String minTemp;
+    private TextView mTextViewRandomValue;
     private TextView mTextViewTodayDate;
     private TextView mTextViewMaxTemp;
     private TextView mTextViewMinTemp;
@@ -52,6 +55,7 @@ public class MainActivity extends WearableActivity implements
     }
 
     private void initViews() {
+        mTextViewRandomValue = (TextView) findViewById(R.id.textView_randomValue);
         mTextViewTodayDate = (TextView) findViewById(R.id.textView_todayDate);
         mTextViewMaxTemp = (TextView) findViewById(R.id.textView_maxTemp);
         mTextViewMinTemp = (TextView) findViewById(R.id.textView_minTemp);
@@ -69,13 +73,15 @@ public class MainActivity extends WearableActivity implements
                     if (dataItem.getUri().getPath().equals(ITEM_MAX_TEMP)) {
                         DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
 
+                        randomValue = dataMapItem.getDataMap().getString(KEY_RANDOM_VALUE);
                         todayDate = dataMapItem.getDataMap().getString(KEY_DATE);
-                        maxTemp = dataMapItem.getDataMap().getString(KEY_WEATHER);
+                        maxTemp = dataMapItem.getDataMap().getString(KEY_MAX_TEMP);
                         minTemp = dataMapItem.getDataMap().getString(KEY_MIN_TEMP);
 
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                mTextViewRandomValue.setText(randomValue);
                                 mTextViewTodayDate.setText((todayDate));
                                 mTextViewMaxTemp.setText((maxTemp));
                                 mTextViewMinTemp.setText((minTemp));
@@ -115,17 +121,21 @@ public class MainActivity extends WearableActivity implements
     }
 
     @Override
-    public void onDataChanged(DataEventBuffer eventos) {
-        for (DataEvent event : eventos) {
+    public void onDataChanged(DataEventBuffer events) {
+        for (DataEvent event : events) {
             if (event.getType() == DataEvent.TYPE_CHANGED) {
                 DataItem item = event.getDataItem();
                 if (item.getUri().getPath().equals(ITEM_MAX_TEMP)) {
                     DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
 
-                    maxTemp = dataMap.getString(KEY_WEATHER);
+                    randomValue = dataMap.getString(KEY_RANDOM_VALUE);
+                    todayDate = dataMap.getString(KEY_DATE);
+                    maxTemp = dataMap.getString(KEY_MAX_TEMP);
+                    minTemp = dataMap.getString(KEY_MIN_TEMP);
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
+                            mTextViewRandomValue.setText((randomValue));
                             mTextViewTodayDate.setText((todayDate));
                             mTextViewMaxTemp.setText((maxTemp));
                             mTextViewMinTemp.setText((minTemp));
