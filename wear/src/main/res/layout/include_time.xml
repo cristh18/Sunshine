@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center">
+
+    <TextView
+        android:id="@+id/textView_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:textColor="#ffffff"
+        android:textSize="30sp"
+        tools:text="Time" />
+
+    <TextView
+        android:id="@+id/textView_date"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textView_time"
+        android:layout_centerHorizontal="true"
+        android:textColor="#ffffff"
+        android:textSize="13sp"
+        tools:text="Date" />
+
+
+    <ImageView
+        android:id="@+id/imageViewIcon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textView_date"
+        android:layout_marginStart="10dp"
+        tools:src="@mipmap/ic_launcher" />
+
+    <TextView
+        android:id="@+id/textView_maxTemp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textView_date"
+        android:layout_marginStart="60dp"
+        android:layout_marginTop="15dp"
+        android:textColor="#ffffff"
+        android:textSize="13sp"
+        tools:text="Max Temp" />
+
+    <TextView
+        android:id="@+id/textView_minTemp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textView_date"
+        android:layout_marginStart="130dp"
+        android:layout_marginTop="15dp"
+        android:textColor="#ffffff"
+        android:textSize="13sp"
+        tools:text="Min Temp" />
+
+
+</RelativeLayout>

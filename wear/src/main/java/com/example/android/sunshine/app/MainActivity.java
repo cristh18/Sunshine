@@ -29,10 +29,10 @@ public class MainActivity extends WearableActivity implements
     private static final String KEY_MIN_TEMP = "min_temp";
     private static final String KEY_DATE = "date";
     private static final String ITEM_MAX_TEMP = "/temp";
-    private String randomValue;
-    private String todayDate;
-    private String maxTemp;
-    private String minTemp;
+    public static String randomValue;
+    public static String todayDate;
+    public static String maxTemp;
+    public static  String minTemp;
     private TextView mTextViewRandomValue;
     private TextView mTextViewTodayDate;
     private TextView mTextViewMaxTemp;

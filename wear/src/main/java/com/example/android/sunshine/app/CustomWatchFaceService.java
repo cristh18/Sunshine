@@ -8,150 +8,276 @@ import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.wearable.watchface.CanvasWatchFaceService;
+import android.support.wearable.watchface.WatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
-import android.text.format.Time;
+import android.text.format.DateFormat;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
+import com.google.android.gms.wearable.DataMap;
+
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class CustomWatchFaceService extends CanvasWatchFaceService {
+    private static final String TAG = CustomWatchFaceService.class.getName();
 
-    private static final long TICK_PERIOD_MILLIS = TimeUnit.SECONDS.toMillis(1);
+    private static final Typeface BOLD_TYPEFACE =
+            Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD);
+    private static final Typeface NORMAL_TYPEFACE =
+            Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
+
+    /**
+     * Update rate in milliseconds for normal (not ambient and not mute) mode. We update twice
+     * a second to blink the colons.
+     */
+    private static final long NORMAL_UPDATE_RATE_MS = 500;
+
+    /**
+     * Update rate in milliseconds for mute mode. We update every minute, like in ambient mode.
+     */
+    private static final long MUTE_UPDATE_RATE_MS = TimeUnit.MINUTES.toMillis(1);
 
     @Override
     public Engine onCreateEngine() {
-        return new WatchFaceEngine();
+        return new Engine();
     }
 
-    private class WatchFaceEngine extends Engine {
+    private class Engine extends CanvasWatchFaceService.Engine {
+        static final String COLON_STRING = ":";
 
-        //Member variables
-        private static final int MSG_UPDATE_TIME_ID = 42;
-        private static final long DEFAULT_UPDATE_RATE_MS = 1000;
-        private long mUpdateRateMs = 1000;
+        /**
+         * Alpha value for drawing time when in mute mode.
+         */
+        static final int MUTE_ALPHA = 100;
 
-        private Time mDisplayTime;
+        /**
+         * Alpha value for drawing time when not in mute mode.
+         */
+        static final int NORMAL_ALPHA = 255;
 
-        private Paint mBackgroundColorPaint;
-        private Paint mTextColorPaint;
+        static final int MSG_UPDATE_TIME = 0;
 
-        private boolean mHasTimeZoneReceiverBeenRegistered = false;
-        private boolean mIsInMuteMode;
-        private boolean mIsLowBitAmbient;
+        /**
+         * How often {@link #mUpdateTimeHandler} ticks in milliseconds.
+         */
+        long mInteractiveUpdateRateMs = NORMAL_UPDATE_RATE_MS;
 
-        private float mXOffset;
-        private float mYOffset;
-        private float mYOffsetDate;
-
-        private int mBackgroundColor = getColor(R.color.primary_light);
-        private int mTextColor = getColor(R.color.white);
-        private int mTextColorNoAmbient = getColor(R.color.accent_light);
-        private int mTextColorDate = getColor(R.color.grey);
-
-        final BroadcastReceiver mTimeZoneBroadcastReceiver = new BroadcastReceiver() {
+        /**
+         * Handler to update the time periodically in interactive mode.
+         */
+        final Handler mUpdateTimeHandler = new Handler() {
             @Override
-            public void onReceive(Context context, Intent intent) {
-                mDisplayTime.clear(intent.getStringExtra("time-zone"));
-                mDisplayTime.setToNow();
-            }
-        };
+            public void handleMessage(Message message) {
+                switch (message.what) {
+                    case MSG_UPDATE_TIME:
 
-        private final Handler mTimeHandler = new Handler() {
-            @Override
-            public void handleMessage(Message msg) {
-                switch (msg.what) {
-                    case MSG_UPDATE_TIME_ID: {
+                        Log.v(TAG, "updating time");
+
                         invalidate();
-                        if (isVisible() && !isInAmbientMode()) {
-                            long currentTimeMillis = System.currentTimeMillis();
-                            long delay = mUpdateRateMs - (currentTimeMillis % mUpdateRateMs);
-                            mTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_TIME_ID, delay);
+                        if (shouldTimerBeRunning()) {
+                            long timeMs = System.currentTimeMillis();
+                            long delayMs =
+                                    mInteractiveUpdateRateMs - (timeMs % mInteractiveUpdateRateMs);
+                            mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_TIME, delayMs);
                         }
                         break;
-                    }
                 }
             }
         };
 
-        //Overridden methods
+        /**
+         * Handles time zone and locale changes.
+         */
+        final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                mCalendar.setTimeZone(TimeZone.getDefault());
+                initFormats();
+                invalidate();
+            }
+        };
+
+        /**
+         * Unregistering an unregistered receiver throws an exception. Keep track of the
+         * registration state to prevent that.
+         */
+        boolean mRegisteredReceiver = false;
+
+        Paint mBackgroundPaint;
+        Paint mDatePaint;
+        Paint mHourPaint;
+        Paint mMinutePaint;
+        Paint mAmPmPaint;
+        Paint mColonPaint;
+        float mColonWidth;
+        boolean mMute;
+
+        Calendar mCalendar;
+        Date mDate;
+        SimpleDateFormat mDayOfWeekFormat;
+        java.text.DateFormat mDateFormat;
+
+        boolean mShouldDrawColons;
+        float mXOffset;
+        float mYOffset;
+        float mLineHeight;
+        String mAmString;
+        String mPmString;
+        int mInteractiveBackgroundColor = getColor(R.color.primary_light);
+        int mInteractiveHourDigitsColor =
+                DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_HOUR_DIGITS;
+        int mInteractiveMinuteDigitsColor =
+                DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_MINUTE_DIGITS;
+
+        /**
+         * Whether the display supports fewer bits for each color in ambient mode. When true, we
+         * disable anti-aliasing in ambient mode.
+         */
+        boolean mLowBitAmbient;
+
         @Override
         public void onCreate(SurfaceHolder holder) {
+
+            Log.d(TAG, "onCreate");
+
             super.onCreate(holder);
 
             setWatchFaceStyle(new WatchFaceStyle.Builder(CustomWatchFaceService.this)
-                    .setBackgroundVisibility(WatchFaceStyle.BACKGROUND_VISIBILITY_INTERRUPTIVE)
                     .setCardPeekMode(WatchFaceStyle.PEEK_MODE_VARIABLE)
+                    .setBackgroundVisibility(WatchFaceStyle.BACKGROUND_VISIBILITY_INTERRUPTIVE)
                     .setShowSystemUiTime(false)
-                    .build()
-            );
+                    .build());
+            Resources resources = CustomWatchFaceService.this.getResources();
+            mYOffset = resources.getDimension(R.dimen.digital_y_offset);
+            mLineHeight = resources.getDimension(R.dimen.digital_line_height);
+            mAmString = resources.getString(R.string.digital_am);
+            mPmString = resources.getString(R.string.digital_pm);
 
-            initBackground();
-            initDisplayText();
+            mBackgroundPaint = new Paint();
+            mBackgroundPaint.setColor(mInteractiveBackgroundColor);
+            mDatePaint = createTextPaint(getColor(R.color.white));
+            mHourPaint = createTextPaint(mInteractiveHourDigitsColor, BOLD_TYPEFACE);
+            mMinutePaint = createTextPaint(mInteractiveMinuteDigitsColor);
+            mAmPmPaint = createTextPaint(getColor(R.color.digital_am_pm));
+            mColonPaint = createTextPaint(getColor(R.color.white));
 
-            mDisplayTime = new Time();
+            mCalendar = Calendar.getInstance();
+            mDate = new Date();
+            initFormats();
         }
 
         @Override
         public void onDestroy() {
-            mTimeHandler.removeMessages(MSG_UPDATE_TIME_ID);
+            mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
             super.onDestroy();
+        }
+
+        private Paint createTextPaint(int defaultInteractiveColor) {
+            return createTextPaint(defaultInteractiveColor, NORMAL_TYPEFACE);
+        }
+
+        private Paint createTextPaint(int defaultInteractiveColor, Typeface typeface) {
+            Paint paint = new Paint();
+            paint.setColor(defaultInteractiveColor);
+            paint.setTypeface(typeface);
+            paint.setAntiAlias(true);
+            return paint;
         }
 
         @Override
         public void onVisibilityChanged(boolean visible) {
+
+            Log.d(TAG, "onVisibilityChanged: " + visible);
+
             super.onVisibilityChanged(visible);
 
-            if (visible) {
-                if (!mHasTimeZoneReceiverBeenRegistered) {
-
-                    IntentFilter filter = new IntentFilter(Intent.ACTION_TIMEZONE_CHANGED);
-                    CustomWatchFaceService.this.registerReceiver(mTimeZoneBroadcastReceiver, filter);
-
-                    mHasTimeZoneReceiverBeenRegistered = true;
-                }
-
-                mDisplayTime.clear(TimeZone.getDefault().getID());
-                mDisplayTime.setToNow();
-            } else {
-                if (mHasTimeZoneReceiverBeenRegistered) {
-                    CustomWatchFaceService.this.unregisterReceiver(mTimeZoneBroadcastReceiver);
-                    mHasTimeZoneReceiverBeenRegistered = false;
-                }
-            }
-
+            // Whether the timer should be running depends on whether we're visible (as well as
+            // whether we're in ambient mode), so we may need to start or stop the timer.
             updateTimer();
+        }
+
+        private void initFormats() {
+            mDayOfWeekFormat = new SimpleDateFormat("EEEE", Locale.getDefault());
+            mDayOfWeekFormat.setCalendar(mCalendar);
+            mDateFormat = DateFormat.getDateFormat(CustomWatchFaceService.this);
+            mDateFormat.setCalendar(mCalendar);
+        }
+
+        private void registerReceiver() {
+            if (mRegisteredReceiver) {
+                return;
+            }
+            mRegisteredReceiver = true;
+            IntentFilter filter = new IntentFilter(Intent.ACTION_TIMEZONE_CHANGED);
+            filter.addAction(Intent.ACTION_LOCALE_CHANGED);
+            CustomWatchFaceService.this.registerReceiver(mReceiver, filter);
+        }
+
+        private void unregisterReceiver() {
+            if (!mRegisteredReceiver) {
+                return;
+            }
+            mRegisteredReceiver = false;
+            CustomWatchFaceService.this.unregisterReceiver(mReceiver);
         }
 
         @Override
         public void onApplyWindowInsets(WindowInsets insets) {
+
+            Log.d(TAG, "onApplyWindowInsets: " + (insets.isRound() ? "round" : "square"));
+
             super.onApplyWindowInsets(insets);
+
+            // Load resources that have alternate values for round watches.
             Resources resources = CustomWatchFaceService.this.getResources();
             boolean isRound = insets.isRound();
-            mYOffset = getResources().getDimension(R.dimen.interactive_y_offset);
-            mYOffsetDate = getResources().getDimension(R.dimen.interactive_y_offset_date);
             mXOffset = resources.getDimension(isRound
-                    ? R.dimen.fit_x_offset_round : R.dimen.fit_x_offset);
+                    ? R.dimen.digital_x_offset_round : R.dimen.digital_x_offset);
+            float textSize = resources.getDimension(isRound
+                    ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
+            float amPmSize = resources.getDimension(isRound
+                    ? R.dimen.digital_am_pm_size_round : R.dimen.digital_am_pm_size);
+
+            mDatePaint.setTextSize(resources.getDimension(R.dimen.digital_date_text_size));
+            mHourPaint.setTextSize(textSize);
+            mMinutePaint.setTextSize(textSize);
+            mAmPmPaint.setTextSize(amPmSize);
+            mColonPaint.setTextSize(textSize);
+
+            mColonWidth = mColonPaint.measureText(COLON_STRING);
         }
 
         @Override
         public void onPropertiesChanged(Bundle properties) {
             super.onPropertiesChanged(properties);
 
-            if (properties.getBoolean(PROPERTY_BURN_IN_PROTECTION, false)) {
-                mIsLowBitAmbient = properties.getBoolean(PROPERTY_LOW_BIT_AMBIENT, false);
-            }
+            boolean burnInProtection = properties.getBoolean(PROPERTY_BURN_IN_PROTECTION, false);
+            mHourPaint.setTypeface(burnInProtection ? NORMAL_TYPEFACE : BOLD_TYPEFACE);
+
+            mLowBitAmbient = properties.getBoolean(PROPERTY_LOW_BIT_AMBIENT, false);
+
+
+            Log.d(TAG, "onPropertiesChanged: burn-in protection = " + burnInProtection
+                    + ", low-bit ambient = " + mLowBitAmbient);
+
         }
 
         @Override
         public void onTimeTick() {
             super.onTimeTick();
+
+            Log.d(TAG, "onTimeTick: ambient = " + isInAmbientMode());
 
             invalidate();
         }
@@ -160,103 +286,189 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
         public void onAmbientModeChanged(boolean inAmbientMode) {
             super.onAmbientModeChanged(inAmbientMode);
 
-            if (inAmbientMode) {
-                mTextColorPaint.setColor(mTextColor);
-            } else {
-                mTextColorPaint.setColor(mTextColorNoAmbient);
-            }
+            Log.d(TAG, "onAmbientModeChanged: " + inAmbientMode);
 
-            if (mIsLowBitAmbient) {
-                mTextColorPaint.setAntiAlias(!inAmbientMode);
-            }
+            adjustPaintColorToCurrentMode(mBackgroundPaint, mInteractiveBackgroundColor, getColor(R.color.primary_light));
+            adjustPaintColorToCurrentMode(mHourPaint, mInteractiveHourDigitsColor,
+                    DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_HOUR_DIGITS);
+            adjustPaintColorToCurrentMode(mMinutePaint, mInteractiveMinuteDigitsColor,
+                    DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_MINUTE_DIGITS);
+            // Actually, the seconds are not rendered in the ambient mode, so we could pass just any
+            // value as ambientColor here.
 
+            if (mLowBitAmbient) {
+                boolean antiAlias = !inAmbientMode;
+                mDatePaint.setAntiAlias(antiAlias);
+                mHourPaint.setAntiAlias(antiAlias);
+                mMinutePaint.setAntiAlias(antiAlias);
+                mAmPmPaint.setAntiAlias(antiAlias);
+                mColonPaint.setAntiAlias(antiAlias);
+            }
             invalidate();
+
+            // Whether the timer should be running depends on whether we're in ambient mode (as well
+            // as whether we're visible), so we may need to start or stop the timer.
             updateTimer();
+        }
+
+        private void adjustPaintColorToCurrentMode(Paint paint, int interactiveColor,
+                                                   int ambientColor) {
+            paint.setColor(isInAmbientMode() ? ambientColor : interactiveColor);
         }
 
         @Override
         public void onInterruptionFilterChanged(int interruptionFilter) {
+
+            Log.d(TAG, "onInterruptionFilterChanged: " + interruptionFilter);
+
             super.onInterruptionFilterChanged(interruptionFilter);
 
-            boolean isDeviceMuted = (interruptionFilter == android.support.wearable.watchface.WatchFaceService.INTERRUPTION_FILTER_NONE);
-            if (isDeviceMuted) {
-                mUpdateRateMs = TimeUnit.MINUTES.toMillis(1);
+            boolean inMuteMode = interruptionFilter == WatchFaceService.INTERRUPTION_FILTER_NONE;
+            // We only need to update once a minute in mute mode.
+            setInteractiveUpdateRateMs(inMuteMode ? MUTE_UPDATE_RATE_MS : NORMAL_UPDATE_RATE_MS);
 
-            } else {
-                mUpdateRateMs = DEFAULT_UPDATE_RATE_MS;
-            }
-
-            if (mIsInMuteMode != isDeviceMuted) {
-                mIsInMuteMode = isDeviceMuted;
-                int alpha = (isDeviceMuted) ? 100 : 255;
-                mTextColorPaint.setAlpha(alpha);
+            if (mMute != inMuteMode) {
+                mMute = inMuteMode;
+                int alpha = inMuteMode ? MUTE_ALPHA : NORMAL_ALPHA;
+                mDatePaint.setAlpha(alpha);
+                mHourPaint.setAlpha(alpha);
+                mMinutePaint.setAlpha(alpha);
+                mColonPaint.setAlpha(alpha);
+                mAmPmPaint.setAlpha(alpha);
                 invalidate();
-
             }
+        }
 
-            updateTimer();
+        public void setInteractiveUpdateRateMs(long updateRateMs) {
+            if (updateRateMs == mInteractiveUpdateRateMs) {
+                return;
+            }
+            mInteractiveUpdateRateMs = updateRateMs;
+
+            // Stop and restart the timer so the new update rate takes effect immediately.
+            if (shouldTimerBeRunning()) {
+                updateTimer();
+            }
+        }
+
+        private void updatePaintIfInteractive(Paint paint, int interactiveColor) {
+            if (!isInAmbientMode() && paint != null) {
+                paint.setColor(interactiveColor);
+            }
+        }
+
+        private void setInteractiveBackgroundColor(int color) {
+            mInteractiveBackgroundColor = color;
+            updatePaintIfInteractive(mBackgroundPaint, color);
+        }
+
+        private void setInteractiveHourDigitsColor(int color) {
+            mInteractiveHourDigitsColor = color;
+            updatePaintIfInteractive(mHourPaint, color);
+        }
+
+        private void setInteractiveMinuteDigitsColor(int color) {
+            mInteractiveMinuteDigitsColor = color;
+            updatePaintIfInteractive(mMinutePaint, color);
+        }
+
+        private String formatTwoDigitNumber(int hour) {
+            return String.format("%02d", hour);
+        }
+
+        private String getAmPmString(int amPm) {
+            return amPm == Calendar.AM ? mAmString : mPmString;
         }
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
-            super.onDraw(canvas, bounds);
+            long now = System.currentTimeMillis();
+            mCalendar.setTimeInMillis(now);
+            mDate.setTime(now);
+            boolean is24Hour = DateFormat.is24HourFormat(CustomWatchFaceService.this);
 
-            mDisplayTime.setToNow();
+            // Show colons for the first half of each second so the colons blink on when the time
+            // updates.
+            mShouldDrawColons = (System.currentTimeMillis() % 1000) < 500;
 
-            drawBackground(canvas, bounds);
-            drawTimeText(canvas);
-            drawDateText(canvas);
-        }
+            // Draw the background.
+            canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
 
-        //Utility methods
-        private void initBackground() {
-            mBackgroundColorPaint = new Paint();
-            mBackgroundColorPaint.setColor(mBackgroundColor);
-        }
-
-        private void initDisplayText() {
-            mTextColorPaint = new Paint();
-            mTextColorPaint.setColor(mTextColor);
-            mTextColorPaint.setAntiAlias(true);
-            mTextColorPaint.setTextSize(getResources().getDimension(R.dimen.digital_text_size));
-        }
-
-        private void updateTimer() {
-            mTimeHandler.removeMessages(MSG_UPDATE_TIME_ID);
-            if (isVisible() && !isInAmbientMode()) {
-                mTimeHandler.sendEmptyMessage(MSG_UPDATE_TIME_ID);
-            }
-        }
-
-        private void drawBackground(Canvas canvas, Rect bounds) {
-            canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundColorPaint);
-        }
-
-        private void drawTimeText(Canvas canvas) {
-            String timeText = getHourString() + ":" + String.format("%02d", mDisplayTime.minute);
-            if (isInAmbientMode() || mIsInMuteMode) {
-                timeText += (mDisplayTime.hour < 12) ? "AM" : "PM";
+            // Draw the hours.
+            float x = mXOffset;
+            String hourString;
+            if (is24Hour) {
+                hourString = formatTwoDigitNumber(mCalendar.get(Calendar.HOUR_OF_DAY));
             } else {
-                timeText += String.format(":%02d", mDisplayTime.second);
+                int hour = mCalendar.get(Calendar.HOUR);
+                if (hour == 0) {
+                    hour = 12;
+                }
+                hourString = String.valueOf(hour);
             }
-            canvas.drawText(timeText, mXOffset, mYOffset, mTextColorPaint);
+            canvas.drawText(hourString, x, mYOffset, mHourPaint);
+            x += mHourPaint.measureText(hourString);
+
+            // In ambient and mute modes, always draw the first colon. Otherwise, draw the
+            // first colon for the first half of each second.
+            if (isInAmbientMode() || mMute || mShouldDrawColons) {
+                canvas.drawText(COLON_STRING, x, mYOffset, mColonPaint);
+            }
+            x += mColonWidth;
+
+            // Draw the minutes.
+            String minuteString = formatTwoDigitNumber(mCalendar.get(Calendar.MINUTE));
+            canvas.drawText(minuteString, x, mYOffset, mMinutePaint);
+
+            // Only render the day of week and date if there is no peek card, so they do not bleed
+            // into each other in ambient mode.
+            if (getPeekCardPosition().isEmpty()) {
+                // Day of week
+                canvas.drawText(
+                        mDayOfWeekFormat.format(mDate),
+                        mXOffset, mYOffset + mLineHeight, mDatePaint);
+                // Date
+                canvas.drawText(
+                        mDateFormat.format(mDate),
+                        mXOffset, mYOffset + mLineHeight * 2, mDatePaint);
+            }
         }
 
-        private void drawDateText(Canvas canvas) {
-            String dateText = new Date().toString();
-            Paint painDateText = new Paint(mTextColorPaint);
-            painDateText.setTextSize(getResources().getDimension(R.dimen.digital_text_size_date));
-            painDateText.setColor(mTextColorDate);
-            canvas.drawText(dateText, mXOffset, mYOffsetDate, painDateText);
+        /**
+         * Starts the {@link #mUpdateTimeHandler} timer if it should be running and isn't currently
+         * or stops it if it shouldn't be running but currently is.
+         */
+        private void updateTimer() {
+
+            Log.d(TAG, "updateTimer");
+
+            mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
+            if (shouldTimerBeRunning()) {
+                mUpdateTimeHandler.sendEmptyMessage(MSG_UPDATE_TIME);
+            }
         }
 
-        private String getHourString() {
-            if (mDisplayTime.hour % 12 == 0)
-                return "12";
-            else if (mDisplayTime.hour <= 12)
-                return String.valueOf(mDisplayTime.hour);
-            else
-                return String.valueOf(mDisplayTime.hour - 12);
+        /**
+         * Returns whether the {@link #mUpdateTimeHandler} timer should be running. The timer should
+         * only run when we're visible and in interactive mode.
+         */
+        private boolean shouldTimerBeRunning() {
+            return isVisible() && !isInAmbientMode();
+        }
+
+        private void setDefaultValuesForMissingConfigKeys(DataMap config) {
+            addIntKeyIfMissing(config, DigitalWatchFaceUtil.KEY_BACKGROUND_COLOR,
+                    getColor(R.color.primary_light));
+            addIntKeyIfMissing(config, DigitalWatchFaceUtil.KEY_HOURS_COLOR,
+                    DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_HOUR_DIGITS);
+            addIntKeyIfMissing(config, DigitalWatchFaceUtil.KEY_MINUTES_COLOR,
+                    DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_MINUTE_DIGITS);
+        }
+
+        private void addIntKeyIfMissing(DataMap config, String key, int color) {
+            if (!config.containsKey(key)) {
+                config.putInt(key, color);
+            }
         }
     }
 }

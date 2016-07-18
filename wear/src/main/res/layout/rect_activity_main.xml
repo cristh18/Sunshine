@@ -4,11 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    tools:context="com.example.cristhian.sunshinewear.MainActivity"
+    tools:context="com.example.android.sunshine.app.MainActivity"
     tools:deviceIds="wear_square">
 
-    <TextView
-        android:id="@+id/text"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content" />
+    <!--<include layout="@layout/include_time" />-->
 </LinearLayout>

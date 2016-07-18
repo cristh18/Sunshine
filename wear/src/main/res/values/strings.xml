@@ -6,4 +6,6 @@
     <string name="max_temperature">Max Temperature: </string>
     <string name="min_temperature">Min Temperature: </string>
     <string name="random_value">Random value: </string>
+    <string name="digital_am">AM</string>
+    <string name="digital_pm">PM</string>
 </resources>
