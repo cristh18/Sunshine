@@ -5,17 +5,20 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
-import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
@@ -25,7 +28,6 @@ import com.google.android.gms.wearable.DataMap;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -208,10 +210,8 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
         }
 
         private void initFormats() {
-            mDayOfWeekFormat = new SimpleDateFormat("EEEE", Locale.getDefault());
-            mDayOfWeekFormat.setCalendar(mCalendar);
-            mDateFormat = DateFormat.getDateFormat(CustomWatchFaceService.this);
-            mDateFormat.setCalendar(mCalendar);
+            String pattern = "E, MMM dd yyyy";
+            mDateFormat = new SimpleDateFormat(pattern);
         }
 
         private void registerReceiver() {
@@ -385,7 +385,6 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
             long now = System.currentTimeMillis();
             mCalendar.setTimeInMillis(now);
             mDate.setTime(now);
-            boolean is24Hour = DateFormat.is24HourFormat(CustomWatchFaceService.this);
 
             // Show colons for the first half of each second so the colons blink on when the time
             // updates.
@@ -395,17 +394,8 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
             canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
 
             // Draw the hours.
-            float x = mXOffset;
-            String hourString;
-            if (is24Hour) {
-                hourString = formatTwoDigitNumber(mCalendar.get(Calendar.HOUR_OF_DAY));
-            } else {
-                int hour = mCalendar.get(Calendar.HOUR);
-                if (hour == 0) {
-                    hour = 12;
-                }
-                hourString = String.valueOf(hour);
-            }
+            float x = mXOffset + 55;
+            String hourString = formatTwoDigitNumber(mCalendar.get(Calendar.HOUR_OF_DAY));
             canvas.drawText(hourString, x, mYOffset, mHourPaint);
             x += mHourPaint.measureText(hourString);
 
@@ -420,18 +410,35 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
             String minuteString = formatTwoDigitNumber(mCalendar.get(Calendar.MINUTE));
             canvas.drawText(minuteString, x, mYOffset, mMinutePaint);
 
-            // Only render the day of week and date if there is no peek card, so they do not bleed
-            // into each other in ambient mode.
-            if (getPeekCardPosition().isEmpty()) {
-                // Day of week
-                canvas.drawText(
-                        mDayOfWeekFormat.format(mDate),
-                        mXOffset, mYOffset + mLineHeight, mDatePaint);
-                // Date
-                canvas.drawText(
-                        mDateFormat.format(mDate),
-                        mXOffset, mYOffset + mLineHeight * 2, mDatePaint);
-            }
+            // Date
+            canvas.drawText(
+                    mDateFormat.format(mDate).toUpperCase(),
+                    mXOffset + 20, mYOffset + mLineHeight, mDatePaint);
+
+            canvas.drawRect(new Rect(145, 190, 225,  190), getRectPaint());
+
+            canvas.drawBitmap(
+                    getBitMapImage(getApplicationContext()),
+                    mXOffset + 20, mYOffset + mLineHeight * 2, mDatePaint);
+
+            canvas.drawText(
+                    MainActivity.maxTemp != null ? MainActivity.maxTemp : "25°",
+                    mXOffset + 120, mYOffset + mLineHeight * 3, mDatePaint);
+
+            canvas.drawText(
+                    MainActivity.minTemp != null ? MainActivity.maxTemp : "16°",
+                    mXOffset + 180, mYOffset + mLineHeight * 3, mDatePaint);
+
+        }
+
+        @NonNull
+        private Paint getRectPaint() {
+            Paint p = new Paint();
+            p.setAntiAlias(true);
+            p.setColor(Color.WHITE);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(2f);
+            return p;
         }
 
         /**
@@ -470,5 +477,10 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
                 config.putInt(key, color);
             }
         }
+    }
+
+    private Bitmap getBitMapImage(Context context) {
+        return BitmapFactory.decodeResource(context.getResources(),
+                R.mipmap.ic_launcher);
     }
 }
