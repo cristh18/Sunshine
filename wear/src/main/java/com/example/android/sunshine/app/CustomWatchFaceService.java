@@ -23,8 +23,6 @@ import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
-import com.google.android.gms.wearable.DataMap;
-
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -127,7 +125,6 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
 
         Calendar mCalendar;
         Date mDate;
-        SimpleDateFormat mDayOfWeekFormat;
         java.text.DateFormat mDateFormat;
 
         boolean mShouldDrawColons;
@@ -415,7 +412,7 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
                     mDateFormat.format(mDate).toUpperCase(),
                     mXOffset + 20, mYOffset + mLineHeight, mDatePaint);
 
-            canvas.drawRect(new Rect(145, 190, 225,  190), getRectPaint());
+            canvas.drawRect(new Rect(145, 190, 225, 190), getRectPaint());
 
             canvas.drawBitmap(
                     getBitMapImage(getApplicationContext()),
@@ -463,20 +460,6 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
             return isVisible() && !isInAmbientMode();
         }
 
-        private void setDefaultValuesForMissingConfigKeys(DataMap config) {
-            addIntKeyIfMissing(config, DigitalWatchFaceUtil.KEY_BACKGROUND_COLOR,
-                    getColor(R.color.primary_light));
-            addIntKeyIfMissing(config, DigitalWatchFaceUtil.KEY_HOURS_COLOR,
-                    DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_HOUR_DIGITS);
-            addIntKeyIfMissing(config, DigitalWatchFaceUtil.KEY_MINUTES_COLOR,
-                    DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_MINUTE_DIGITS);
-        }
-
-        private void addIntKeyIfMissing(DataMap config, String key, int color) {
-            if (!config.containsKey(key)) {
-                config.putInt(key, color);
-            }
-        }
     }
 
     private Bitmap getBitMapImage(Context context) {
