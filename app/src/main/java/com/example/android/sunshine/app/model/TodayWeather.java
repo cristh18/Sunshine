@@ -9,16 +9,26 @@ import java.util.Date;
  */
 public class TodayWeather {
 
+    private int weatherId;
     private String todayDate;
     private String todayMaxTemp;
     private String todayMinTemp;
     private Bitmap todayWeatherIcon;
 
-    public TodayWeather(String todayDate, String todayMaxTemp, String todayMinTemp, Bitmap todayWeatherIcon) {
+    public TodayWeather(int weatherId, String todayDate, String todayMaxTemp, String todayMinTemp, Bitmap todayWeatherIcon) {
+        this.weatherId = weatherId;
         this.todayDate = todayDate;
         this.todayMaxTemp = todayMaxTemp;
         this.todayMinTemp = todayMinTemp;
         this.todayWeatherIcon = todayWeatherIcon;
+    }
+
+    public int getWeatherId() {
+        return weatherId;
+    }
+
+    public void setWeatherId(int weatherId) {
+        this.weatherId = weatherId;
     }
 
     public String getTodayDate() {

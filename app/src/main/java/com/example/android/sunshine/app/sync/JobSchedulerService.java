@@ -2,13 +2,17 @@ package com.example.android.sunshine.app.sync;
 
 import android.app.job.JobParameters;
 import android.app.job.JobService;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 import android.widget.Toast;
 
 import com.example.android.sunshine.app.ForecastFragment;
+import com.example.android.sunshine.app.Utility;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.PutDataRequest;
@@ -19,6 +23,7 @@ import com.google.android.gms.wearable.Wearable;
  */
 public class JobSchedulerService extends JobService {
     private static final String KEY_RANDOM_VALUE = "random_value";
+    private static final String KEY_WEATHER_ICON = "weather_icon";
     private static final String KEY_MAX_TEMP = "max_temp";
     private static final String KEY_MIN_TEMP = "min_temp";
     private static final String KEY_DATE = "date";
@@ -56,12 +61,19 @@ public class JobSchedulerService extends JobService {
 
     private void sendToWear(int temp) {
         String randomValue = String.valueOf(temp);
+        int weatherIconResource = Utility.getIconResourceForWeatherCondition(ForecastFragment.todayWeather.getWeatherId());
         String todayDate = ForecastFragment.todayWeather != null ? ForecastFragment.todayWeather.getTodayDate() : "null";
         String todayMaxTemp = ForecastFragment.todayWeather != null ? ForecastFragment.todayWeather.getTodayMaxTemp() : "null";
         String todayMinTemp = ForecastFragment.todayWeather != null ? ForecastFragment.todayWeather.getTodayMinTemp() : "null";
+
+        Bitmap icon = BitmapFactory.decodeResource(getApplicationContext().getResources(),
+                weatherIconResource);
+        Asset asset = Utility.toAsset(icon);
+
         PutDataMapRequest putDataMapReq = PutDataMapRequest.create(ITEM_MAX_TEMP);
 
         putDataMapReq.getDataMap().putString(KEY_RANDOM_VALUE, randomValue);
+        putDataMapReq.getDataMap().putAsset(KEY_WEATHER_ICON, asset);
         putDataMapReq.getDataMap().putString(KEY_DATE, todayDate);
         putDataMapReq.getDataMap().putString(KEY_MAX_TEMP, todayMaxTemp);
         putDataMapReq.getDataMap().putString(KEY_MIN_TEMP, todayMinTemp);

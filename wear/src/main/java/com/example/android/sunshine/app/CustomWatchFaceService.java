@@ -414,8 +414,7 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
 
             canvas.drawRect(new Rect(145, 190, 225, 190), getRectPaint());
 
-            canvas.drawBitmap(
-                    getBitMapImage(getApplicationContext()),
+            canvas.drawBitmap(MainActivity.weatherIcon != null ? MainActivity.weatherIcon : getBitMapImage(getApplicationContext()),
                     mXOffset + 20, mYOffset + mLineHeight * 2, mDatePaint);
 
             canvas.drawText(

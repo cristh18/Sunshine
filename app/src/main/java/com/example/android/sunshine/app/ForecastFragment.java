@@ -491,10 +491,11 @@ public class ForecastFragment extends Fragment implements
         if (cursor.moveToFirst()) {
             do {
                 if (todayWeather == null) {
+                    int weatherId = cursor.getInt(COL_WEATHER_CONDITION_ID);
                     String date = cursor.getString(COL_WEATHER_DATE);
                     String maxTemp = cursor.getString(COL_WEATHER_MAX_TEMP);
                     String minTemp = cursor.getString(COL_WEATHER_MIN_TEMP);
-                    todayWeather = new TodayWeather(date, maxTemp, minTemp, null);
+                    todayWeather = new TodayWeather(weatherId, date, maxTemp, minTemp, null);
                 }
             } while (cursor.moveToNext());
         }

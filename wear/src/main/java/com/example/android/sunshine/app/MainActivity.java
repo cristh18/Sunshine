@@ -1,5 +1,8 @@
 package com.example.android.sunshine.app;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
@@ -10,6 +13,7 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
@@ -19,16 +23,21 @@ import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.Wearable;
 
+import java.io.InputStream;
+
 public class MainActivity extends WearableActivity implements
         DataApi.DataListener,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
 
     private static final String KEY_RANDOM_VALUE = "random_value";
+    private static final String KEY_WEATHER_ICON = "weather_icon";
     private static final String KEY_MAX_TEMP = "max_temp";
     private static final String KEY_MIN_TEMP = "min_temp";
     private static final String KEY_DATE = "date";
     private static final String ITEM_MAX_TEMP = "/temp";
+    public static Bitmap weatherIcon;
+    private Asset icon;
     public static String randomValue;
     public static String todayDate;
     public static String maxTemp;
@@ -74,6 +83,8 @@ public class MainActivity extends WearableActivity implements
                         DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
 
                         randomValue = dataMapItem.getDataMap().getString(KEY_RANDOM_VALUE);
+                        icon = dataMapItem.getDataMap().getAsset(KEY_WEATHER_ICON);
+                        new LoadBitmapAsyncTask().execute(icon);
                         todayDate = dataMapItem.getDataMap().getString(KEY_DATE);
                         maxTemp = dataMapItem.getDataMap().getString(KEY_MAX_TEMP);
                         minTemp = dataMapItem.getDataMap().getString(KEY_MIN_TEMP);
@@ -129,6 +140,8 @@ public class MainActivity extends WearableActivity implements
                     DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
 
                     randomValue = dataMap.getString(KEY_RANDOM_VALUE);
+                    icon = dataMap.getAsset(KEY_WEATHER_ICON);
+                    new LoadBitmapAsyncTask().execute(icon);
                     todayDate = dataMap.getString(KEY_DATE);
                     maxTemp = dataMap.getString(KEY_MAX_TEMP);
                     minTemp = dataMap.getString(KEY_MIN_TEMP);
@@ -162,5 +175,39 @@ public class MainActivity extends WearableActivity implements
             apiClient.disconnect();
         }
         super.onStop();
+    }
+
+    private class LoadBitmapAsyncTask extends AsyncTask<Asset, Void, Bitmap> {
+
+        @Override
+        protected Bitmap doInBackground(Asset... params) {
+
+            if (params.length > 0) {
+
+                Asset asset = params[0];
+
+                InputStream assetInputStream = Wearable.DataApi.getFdForAsset(
+                        apiClient, asset).await().getInputStream();
+
+                if (assetInputStream == null) {
+                    Log.w(LOG_TAG, "Requested an unknown Asset.");
+                    return null;
+                }
+                return BitmapFactory.decodeStream(assetInputStream);
+
+            } else {
+                Log.e(LOG_TAG, "Asset must be non-null");
+                return null;
+            }
+        }
+
+        @Override
+        protected void onPostExecute(Bitmap bitmap) {
+
+            if (bitmap != null) {
+                Log.e(LOG_TAG, "Setting background image on second page..");
+                weatherIcon = bitmap;
+            }
+        }
     }
 }
