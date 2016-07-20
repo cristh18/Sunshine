@@ -80,6 +80,12 @@ public class ForecastFragment extends Fragment implements
     private boolean mHoldForTransition;
     private long mInitialSelectedDate = -1;
 
+    private static final String KEY_WEATHER = "weather";
+    private static final String ITEM_MAX_TEMP = "/temp";
+    public static GoogleApiClient apiClient;
+    public static TodayWeather todayWeather;
+    private JobScheduler mJobScheduler;
+
     private static final String SELECTED_KEY = "selected_position";
 
     private static final int FORECAST_LOADER = 0;
@@ -458,13 +464,6 @@ public class ForecastFragment extends Fragment implements
         }
     }
 
-    /*----------------------------------------------------------------*/
-    private static final String KEY_WEATHER = "weather";
-    private static final String ITEM_MAX_TEMP = "/temp";
-    public static GoogleApiClient apiClient;
-    public static TodayWeather todayWeather;
-    private JobScheduler mJobScheduler;
-
     private void initGoogleApiClient() {
         apiClient = new GoogleApiClient.Builder(getActivity())
                 .addApi(Wearable.API)
@@ -479,7 +478,7 @@ public class ForecastFragment extends Fragment implements
                 new ComponentName(getActivity().getPackageName(), JobSchedulerService.class.getName()));
 
 
-        builder.setPeriodic(3000);
+        builder.setPeriodic(360000);
 
 
         if (mJobScheduler.schedule(builder.build()) <= 0) {
@@ -501,7 +500,6 @@ public class ForecastFragment extends Fragment implements
         }
     }
 
-    //<editor-fold desc="CICLO DE VIDA">
     @Override
     public void onStart() {
         super.onStart();
@@ -515,14 +513,6 @@ public class ForecastFragment extends Fragment implements
             apiClient.disconnect();
         }
         super.onStop();
-    }
-
-    private void sendToWear() {
-        PutDataMapRequest putDataMapReq = PutDataMapRequest.create(ITEM_MAX_TEMP);
-        putDataMapReq.getDataMap().putString(KEY_WEATHER, "30");
-
-        PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
-        PendingResult<DataApi.DataItemResult> result = Wearable.DataApi.putDataItem(apiClient, putDataReq);
     }
 
     @Override
