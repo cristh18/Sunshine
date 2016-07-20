@@ -19,9 +19,11 @@ import android.support.annotation.NonNull;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -37,6 +39,9 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
 
+    int width;
+    int height;
+
     /**
      * Update rate in milliseconds for normal (not ambient and not mute) mode. We update twice
      * a second to blink the colons.
@@ -50,6 +55,8 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
 
     @Override
     public Engine onCreateEngine() {
+        width = getDisplayMetrics().widthPixels;
+        height = getDisplayMetrics().heightPixels;
         return new Engine();
     }
 
@@ -412,7 +419,7 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
                     mDateFormat.format(mDate).toUpperCase(),
                     mXOffset + 20, mYOffset + mLineHeight, mDatePaint);
 
-            canvas.drawRect(new Rect(145, 190, 225, 190), getRectPaint());
+            canvas.drawRect(new Rect(width/2, ((height/2)+20), 225, ((height/2)+20)), getRectPaint());
 
             canvas.drawBitmap(MainActivity.weatherIcon != null ? MainActivity.weatherIcon : getBitMapImage(getApplicationContext()),
                     mXOffset + 20, mYOffset + mLineHeight * 2, mDatePaint);
@@ -459,6 +466,13 @@ public class CustomWatchFaceService extends CanvasWatchFaceService {
             return isVisible() && !isInAmbientMode();
         }
 
+    }
+
+    private DisplayMetrics getDisplayMetrics() {
+        DisplayMetrics metrics = new DisplayMetrics();
+        WindowManager windowManager = (WindowManager)getApplicationContext().getSystemService(Context.WINDOW_SERVICE);
+        windowManager.getDefaultDisplay().getMetrics(metrics);
+        return metrics;
     }
 
     private Bitmap getBitMapImage(Context context) {
